@@ -19,5 +19,5 @@ ENV NODE_PATH=./build
 COPY --from=base /usr/srv/build .
 
 EXPOSE 8886
-#CMD ["yarn", "start"]
+CMD ["node", "build/index.js"]
 
