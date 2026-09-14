@@ -1,0 +1,32 @@
+name: Deploy Salve mais um
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "=== [1/2] Atualizando código ==="
+            cd /www/wwwroot/nodeapps/api_salvemaisum
+            git pull origin main
+
+            echo "=== [2/2] Rebuild + deploy API ==="
+            cd /www/wwwroot/nodeapps/bin_salvemaisum
+            ./deploy.sh prod rebuild app
+
+            echo "=== Status final ==="
+            ./deploy.sh prod ps
