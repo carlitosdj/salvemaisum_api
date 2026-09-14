@@ -22,6 +22,9 @@ jobs:
             set -e
 
             echo "=== [1/2] Atualizando código ==="
+            if [ ! -d "/www/wwwroot/nodeapps/api_salvemaisum/.git" ]; then
+              git clone https://github.com/carlitosdj/salvemaisum_api.git /www/wwwroot/nodeapps/api_salvemaisum
+            fi
             cd /www/wwwroot/nodeapps/api_salvemaisum
             git pull origin main
 
