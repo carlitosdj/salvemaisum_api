@@ -32,11 +32,11 @@ jobs:
             cat > /www/wwwroot/nodeapps/api_salvemaisum/ormconfig.json << 'ORMEOF'
             {
               "type": "mysql",
-              "host": "${{ secrets.DB_HOST }}",
+              "host": "129.121.33.154",
               "port": 3306,
-              "username": "${{ secrets.DB_USERNAME }}",
-              "password": "${{ secrets.DB_PASSWORD }}",
-              "database": "${{ secrets.DB_DATABASE }}",
+              "username": "salvemaisum_admin",
+              "password": "carlosdj123",
+              "database": "salvemaisum_database",
               "synchronize": true,
               "logging": false,
               "entities": ["build/entity/**/*.js"],
