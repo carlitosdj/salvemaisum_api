@@ -31,7 +31,7 @@ jobs:
             echo "=== [2/3] Criando ormconfig.json ==="
             cat > /www/wwwroot/nodeapps/api_salvemaisum/ormconfig.json << 'ORMEOF'
             {
-              "type": "mysql",
+              "type": "mysql2",
               "host": "129.121.33.154",
               "port": 3306,
               "username": "salvemaisum_admin",
