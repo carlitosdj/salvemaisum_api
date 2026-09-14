@@ -21,14 +21,31 @@ jobs:
           script: |
             set -e
 
-            echo "=== [1/2] Atualizando código ==="
+            echo "=== [1/3] Atualizando código ==="
             if [ ! -d "/www/wwwroot/nodeapps/api_salvemaisum/.git" ]; then
               git clone https://github.com/carlitosdj/salvemaisum_api.git /www/wwwroot/nodeapps/api_salvemaisum
             fi
             cd /www/wwwroot/nodeapps/api_salvemaisum
             git pull origin main
 
-            echo "=== [2/2] Rebuild + deploy API ==="
+            echo "=== [2/3] Criando ormconfig.json ==="
+            cat > /www/wwwroot/nodeapps/api_salvemaisum/ormconfig.json << 'ORMEOF'
+            {
+              "type": "mysql",
+              "host": "${{ secrets.DB_HOST }}",
+              "port": 3306,
+              "username": "${{ secrets.DB_USERNAME }}",
+              "password": "${{ secrets.DB_PASSWORD }}",
+              "database": "${{ secrets.DB_DATABASE }}",
+              "synchronize": true,
+              "logging": false,
+              "entities": ["build/entity/**/*.js"],
+              "migrations": ["build/migration/**/*.js"],
+              "subscribers": ["build/subscriber/**/*.js"]
+            }
+            ORMEOF
+
+            echo "=== [3/3] Rebuild + deploy API ==="
             cd /www/wwwroot/nodeapps/bin_salvemaisum
             ./deploy.sh prod rebuild app
 
