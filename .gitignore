@@ -1,9 +1,14 @@
-.idea/
-.vscode/
 node_modules/
-build/
-tmp/
-temp/
-
-# Credenciais — nunca commitar
-ormconfig.json
+.yarn/
+dist/
+.env
+.env.*
+!.env.example
+/uploads/
+*.log
+coverage/
+.vscode/
+.idea/
+*Zone.Identifier
+*.tsbuildinfo
+/privado/

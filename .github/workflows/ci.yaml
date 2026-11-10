@@ -1,0 +1,64 @@
+name: Docker CI/CD - API
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout codigo
+        uses: actions/checkout@v4
+
+      - name: Deploy codigo via rsync
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          REMOTE_USER: ${{ secrets.REMOTE_USER }}
+          REMOTE_PORT: ${{ secrets.REMOTE_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          rsync -avz --delete \
+            --exclude 'node_modules/' \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude '.env.*' \
+            --exclude 'dist/' \
+            --exclude 'coverage/' \
+            --exclude '/uploads/' \
+            --exclude '/privado/' \
+            --exclude '*.log' \
+            -e "ssh -i ~/.ssh/deploy_key -p $REMOTE_PORT -o StrictHostKeyChecking=no -o HostKeyAlgorithms=+ssh-rsa -o PubkeyAcceptedAlgorithms=+ssh-rsa" \
+            ./ $REMOTE_USER@$REMOTE_HOST:/www/wwwroot/nodeapps/api_salvemaisum/
+
+      - name: Build Docker e restart
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.REMOTE_PORT }}
+          script: |
+            set -e
+            cd /www/wwwroot/nodeapps/bin_salvemaisum
+
+            echo "Buildando imagem Docker da API..."
+            docker compose -f docker-compose.prod.yml build --pull api
+
+            echo "Ajustando permissao de uploads e comprovantes (o container roda como www-data)..."
+            docker compose -f docker-compose.prod.yml run --rm --no-deps --user root --entrypoint sh api \
+              -c "mkdir -p /app/uploads /app/privado && chown -R www-data:www-data /app/uploads /app/privado"
+
+            echo "Reiniciando container da API..."
+            docker compose -f docker-compose.prod.yml up -d api
+
+            echo "Limpando imagens antigas..."
+            docker image prune -f
+
+            echo "Deploy da API concluido!"
+            docker compose -f docker-compose.prod.yml ps api
