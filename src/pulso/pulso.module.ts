@@ -65,5 +65,5 @@ class PulsoController {
   @AdminOnly() @Delete('admin/times/:id') removerTime(@Param('id', ParseIntPipe) id: number) { return this.pulso.removerTime(id); }
 }
 
-@Module({ imports: [CampaignModule, AvisoModule], controllers: [PulsoController], providers: [PulsoService] })
+@Module({ imports: [CampaignModule, AvisoModule], controllers: [PulsoController], providers: [PulsoService], exports: [PulsoService] })
 export class PulsoModule {}

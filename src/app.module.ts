@@ -18,6 +18,8 @@ import { SeoModule } from './seo/seo.module';
 import { AvisoModule } from './aviso/aviso.module';
 import { DoadorModule } from './doador/doador.module';
 import { PulsoModule } from './pulso/pulso.module';
+import { CorporativoModule } from './corporativo/corporativo.module';
+import { AcaoModule } from './acao/acao.module';
 import { RegistroModule } from './registro/registro.module';
 import { CicloModule } from './ciclo/ciclo.module';
 
@@ -42,6 +44,8 @@ import { CicloModule } from './ciclo/ciclo.module';
     AvisoModule,
     DoadorModule,
     PulsoModule,
+    CorporativoModule,
+    AcaoModule,
     RegistroModule,
     CicloModule,
   ],

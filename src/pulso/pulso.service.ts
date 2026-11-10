@@ -245,11 +245,16 @@ export class PulsoService {
       WHERE x.situacao <> 'recusado' GROUP BY ci.id, ci.name, st.state ORDER BY doacoes DESC LIMIT 10`);
   }
 
+  // Times de empresa vêm com o nome e o logo do parceiro (campos time_id e logo na tabela component, página 18)
   times() {
-    return this.linhas<{ id: number; nome: string; tipo: string; cidade: string | null; membros: number; confirmadas: number }>(sql`
-      SELECT t.id, t.nome, t.tipo, ci.name AS cidade, COUNT(DISTINCT m.user_id) AS membros, COUNT(x.id) AS confirmadas
+    return this.linhas<{ id: number; nome: string; tipo: string; cidade: string | null; membros: number; confirmadas: number; empresa: string | null; logo: string | null }>(sql`
+      SELECT t.id, t.nome, t.tipo, ci.name AS cidade, COUNT(DISTINCT m.user_id) AS membros, COUNT(DISTINCT x.id) AS confirmadas,
+        MAX(pc.name) AS empresa, MAX(lg.value_extra) AS logo
       FROM \`time\` t LEFT JOIN city ci ON ci.id = t.cidade LEFT JOIN time_membro m ON m.time_id = t.id
       LEFT JOIN registro_doacao x ON x.user_id = m.user_id AND x.situacao = 'aprovado'
+      LEFT JOIN component_extra ve ON ve.key_extra = 'time_id' AND ve.value_extra = CAST(t.id AS CHAR)
+      LEFT JOIN component pc ON pc.id = ve.component_id AND pc.component_id = 18
+      LEFT JOIN component_extra lg ON lg.component_id = pc.id AND lg.key_extra = 'logo'
       GROUP BY t.id, t.nome, t.tipo, ci.name ORDER BY confirmadas DESC, membros DESC, t.id ASC LIMIT 50`);
   }
 
@@ -260,9 +265,16 @@ export class PulsoService {
   }
 
   // Cada pessoa joga por um time de cada vez.
-  async entrarNoTime(id: number, usuario: number) {
+  // Time de empresa só aceita quem chega pelo link de convite.
+  async entrarNoTime(id: number, usuario: number, viaConvite = false) {
     const [t] = await this.db.select({ id: schema.time.id }).from(schema.time).where(eq(schema.time.id, id));
     if (!t) throw new NotFoundException('Time inexistente.');
+    if (!viaConvite) {
+      const [empresa] = await this.linhas<{ id: number }>(sql`
+        SELECT c.id FROM component_extra e JOIN component c ON c.id = e.component_id AND c.component_id = 18
+        WHERE e.key_extra = 'time_id' AND e.value_extra = ${String(id)} LIMIT 1`);
+      if (empresa) throw new BadRequestException('Este é o time de uma empresa. Para entrar, use o link de convite enviado por ela.');
+    }
     await this.sairDoTime(usuario);
     await this.db.insert(schema.timeMembro).values({ time_id: id, user_id: usuario, created_at: agora() });
     return { ok: true };
