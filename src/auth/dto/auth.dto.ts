@@ -13,10 +13,6 @@ export class FacebookDto {
   @IsString() @MaxLength(4096) accessToken: string;
 }
 
-export class LinkDto {
-  @IsString() @MaxLength(2048) token: string;
-}
-
 export class RecoveryDto {
   @IsEmail() email: string;
 }

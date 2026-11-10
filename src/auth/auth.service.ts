@@ -9,7 +9,7 @@ import * as schema from '../_schemas/schema';
 import { EmailService } from '../email/email.service';
 import { appUrl } from '../common/urls';
 import { agora } from '../common/agora';
-import { jwtConstants, versaoSenha } from './auth.constants';
+import { versaoSenha } from './auth.constants';
 import { LoginDto, KeyDto, ResetDto } from './dto/auth.dto';
 
 const COM_PERFIL = { profile: { with: { cityParent: true, stateParent: true } } } as const;
@@ -84,37 +84,6 @@ export class AuthService {
     if (usuario.blocked_at) throw new UnauthorizedException('Conta bloqueada.');
     const access_token = await this.sessao(usuario.id, usuario.password_hash);
     return { ...semSegredos(usuario), access_token };
-  }
-
-  // Entrada sem senha. Chave própria: este token nunca serve como sessão.
-  private readonly usados = new Map<string, number>();
-  private segredoLink() {
-    return `${jwtConstants.secret}:link`;
-  }
-
-  async pedirLink(email: string) {
-    const [usuario] = await this.db.select().from(schema.user).where(eq(schema.user.email, email));
-    if (usuario && !usuario.blocked_at) {
-      const token = await this.jwt.signAsync({ id: usuario.id, jti: crypto.randomUUID() }, { secret: this.segredoLink(), expiresIn: '20m' });
-      await this.email.enviar(usuario.email, 'Seu link para entrar - Salve mais um', this.email.botao('Entrar no Salve Mais Um', 'O link vale por 20 minutos e funciona uma única vez.', `${appUrl()}/auth/link/${token}`, 'Entrar'));
-    }
-    return { msg: 'Ok!' };
-  }
-
-  async entrarComLink(token: string) {
-    let dados: { id: number; jti: string; exp: number };
-    try {
-      dados = await this.jwt.verifyAsync(token, { secret: this.segredoLink() });
-    } catch {
-      throw new UnauthorizedException('Link inválido ou expirado.');
-    }
-    const agoraS = agora();
-    for (const [chave, expira] of this.usados) if (expira < agoraS) this.usados.delete(chave);
-    if (this.usados.has(dados.jti)) throw new UnauthorizedException('Este link já foi usado.');
-    this.usados.set(dados.jti, dados.exp);
-    const [usuario] = await this.db.select().from(schema.user).where(eq(schema.user.id, dados.id));
-    if (!usuario) throw new UnauthorizedException('Link inválido ou expirado.');
-    return this.entrarSocial(usuario.email);
   }
 
   async loginFacebook(token: string) {
