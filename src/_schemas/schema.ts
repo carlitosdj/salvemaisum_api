@@ -315,6 +315,46 @@ export const timeMembro = mysqlTable(
   (t) => [primaryKey({ columns: [t.time_id, t.user_id] }), index('idx_membro_user').on(t.user_id)],
 );
 
+// Blog: notícias e guias. O agente sugere rascunhos; só o admin publica. DDL em api/sql/2026-11-10-noticias.sql.
+export const agenteExecucao = mysqlTable('agente_execucao', {
+  id: int('id').autoincrement().primaryKey(),
+  iniciou_em: int('iniciou_em').notNull(),
+  terminou_em: int('terminou_em'),
+  situacao: varchar('situacao', { length: 12 }).notNull().default('rodando'),
+  encontradas: int('encontradas').notNull().default(0),
+  rascunhos: int('rascunhos').notNull().default(0),
+  tokens_entrada: int('tokens_entrada').notNull().default(0),
+  tokens_saida: int('tokens_saida').notNull().default(0),
+  erro: text('erro'),
+});
+
+export const noticia = mysqlTable(
+  'noticia',
+  {
+    id: int('id').autoincrement().primaryKey(),
+    slug: varchar('slug', { length: 160 }).notNull(),
+    tipo: varchar('tipo', { length: 12 }).notNull().default('noticia'),
+    categoria: varchar('categoria', { length: 40 }),
+    titulo: varchar('titulo', { length: 200 }).notNull(),
+    resumo: varchar('resumo', { length: 400 }),
+    corpo: text('corpo'),
+    o_que_muda: text('o_que_muda'),
+    fonte_nome: varchar('fonte_nome', { length: 160 }),
+    fonte_url: varchar('fonte_url', { length: 500 }),
+    imagem: varchar('imagem', { length: 255 }),
+    texto_instagram: text('texto_instagram'),
+    situacao: varchar('situacao', { length: 12 }).notNull().default('rascunho'),
+    publicar_em: int('publicar_em'),
+    publicada_em: int('publicada_em'),
+    origem: varchar('origem', { length: 12 }).notNull().default('manual'),
+    criado_por: int('criado_por').references(() => user.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+    execucao_id: int('execucao_id').references(() => agenteExecucao.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+    created_at: int('created_at').notNull(),
+    updated_at: int('updated_at').notNull(),
+  },
+  (t) => [uniqueIndex('uq_noticia_slug').on(t.slug), index('idx_noticia_situacao').on(t.situacao, t.publicada_em), index('idx_noticia_fonte').on(t.fonte_url)],
+);
+
 export const cidadeCoordenada = mysqlTable('cidade_coordenada', {
   city_id: int('city_id').primaryKey().references(() => city.id, fk),
   latitude: double('latitude').notNull(),

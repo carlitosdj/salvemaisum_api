@@ -20,6 +20,7 @@ import { DoadorModule } from './doador/doador.module';
 import { PulsoModule } from './pulso/pulso.module';
 import { CorporativoModule } from './corporativo/corporativo.module';
 import { AcaoModule } from './acao/acao.module';
+import { NoticiaModule } from './noticia/noticia.module';
 import { RegistroModule } from './registro/registro.module';
 import { CicloModule } from './ciclo/ciclo.module';
 
@@ -46,6 +47,7 @@ import { CicloModule } from './ciclo/ciclo.module';
     PulsoModule,
     CorporativoModule,
     AcaoModule,
+    NoticiaModule,
     RegistroModule,
     CicloModule,
   ],

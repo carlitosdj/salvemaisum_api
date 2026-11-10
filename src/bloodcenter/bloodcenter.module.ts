@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
 import { asc, desc, eq, inArray, like, or } from 'drizzle-orm';
 import { AdminOnly, SkipAuth } from '../auth/auth.decorators';
+import { distanciaKm } from '../common/geo';
 import { DB_SERVICE, DbType } from '../drizzle/drizzle.provider';
 import * as schema from '../_schemas/schema';
 
@@ -27,6 +28,23 @@ export class BloodcenterDto {
 @Injectable()
 class BloodcenterService {
   constructor(@Inject(DB_SERVICE) private readonly db: DbType) {}
+
+  // Os mais perto de uma cidade, em linha reta, pela coordenada da cidade de cada hemocentro
+  async proximos(cidade: number, limite = 5) {
+    const c = schema.cidadeCoordenada;
+    const [origem] = await this.db.select().from(c).where(eq(c.city_id, cidade));
+    if (!origem) return [];
+    const centros = await this.db
+      .select({ id: schema.bloodcenter.id, name: schema.bloodcenter.name, cidade: schema.city.name, uf: schema.state.state, latitude: c.latitude, longitude: c.longitude })
+      .from(schema.bloodcenter)
+      .innerJoin(c, eq(c.city_id, schema.bloodcenter.bccity))
+      .leftJoin(schema.city, eq(schema.city.id, schema.bloodcenter.bccity))
+      .leftJoin(schema.state, eq(schema.state.id, schema.bloodcenter.bcstate));
+    return centros
+      .map(({ latitude, longitude, ...h }) => ({ ...h, km: distanciaKm(origem, { latitude, longitude }) }))
+      .sort((a, b) => a.km - b.km)
+      .slice(0, limite);
+  }
 
   listar() {
     return this.db.query.bloodcenter.findMany({ with: RELACOES, orderBy: asc(b.name) });
@@ -75,6 +93,7 @@ class BloodcenterController {
   constructor(private readonly centers: BloodcenterService) {}
 
   @SkipAuth() @Get('bloodcenters') listar() { return this.centers.listar(); }
+  @SkipAuth() @Get('bloodcenters/proximos/:cidade') proximos(@Param('cidade', ParseIntPipe) cidade: number) { return this.centers.proximos(cidade); }
   @SkipAuth() @Get('searchbloodcenter/:search') buscar(@Param('search') t: string) { return this.centers.buscar(t); }
   @SkipAuth() @Get('bloodcenter/:id') um(@Param('id', ParseIntPipe) id: number) { return this.centers.um(id); }
   @AdminOnly() @Post('bloodcenter') criar(@Body() d: BloodcenterDto) { return this.centers.criar(d); }

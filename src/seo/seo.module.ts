@@ -10,6 +10,7 @@ import { DB_SERVICE, DbType } from '../drizzle/drizzle.provider';
 import * as schema from '../_schemas/schema';
 import { CampaignModule } from '../campaign/campaign.module';
 import { CampaignService, pedidoAberto, STATUS_ATIVA } from '../campaign/campaign.service';
+import { NoticiaModule, NoticiaService } from '../noticia/noticia.module';
 
 // O app é Vite (sem SSR): estas páginas levam o conteúdo no próprio HTML, para Google e redes sociais lerem sem JavaScript.
 // Em produção o nginx do app encaminha /campanha/*, /hemocentro/*, /sitemap.xml e /robots.txt para cá.
@@ -18,11 +19,23 @@ const RECEBE: Record<string, string[]> = {
   '1': ['O−'], '2': ['O+', 'O−'], '3': ['A−', 'O−'], '4': ['A+', 'A−', 'O+', 'O−'],
   '5': ['B−', 'O−'], '6': ['B+', 'B−', 'O+', 'O−'], '7': ['A−', 'B−', 'AB−', 'O−'], '8': ['A+', 'A−', 'B+', 'B−', 'AB+', 'AB−', 'O+', 'O−'],
 };
-const PAGINAS = ['', 'campanhas', 'hemocentros', 'posso-doar', 'medula', 'howtodonate', 'howitworks', 'initiative', 'whoweare', 'palestras', 'namidia', 'contact'];
+const PAGINAS = ['', 'campanhas', 'hemocentros', 'posso-doar', 'medula', 'howtodonate', 'howitworks', 'initiative', 'whoweare', 'palestras', 'namidia', 'contact', 'noticias', 'acoes', 'apoiadores', 'doar', 'redessociais', 'direitos', 'times'];
 
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const resumo = (t: string, n = 158) => (t.length > n ? `${t.slice(0, n - 1).trim()}…` : t);
 const jsonSeguro = (o: unknown) => JSON.stringify(o).replace(/</g, '\\u003c');
+
+// Mesmo formato do app: parágrafos, "## " para subtítulo e "- " para lista. Nada de HTML vindo do banco.
+function blocoEmHtml(linhas: string[]): string {
+  if (!linhas.length) return '';
+  if (linhas[0].startsWith('## ')) return `<h2>${esc(linhas[0].slice(3))}</h2>${blocoEmHtml(linhas.slice(1))}`;
+  if (linhas.every((l) => l.startsWith('- '))) return `<ul>${linhas.map((l) => `<li>${esc(l.slice(2))}</li>`).join('')}</ul>`;
+  return `<p>${linhas.map(esc).join(' ')}</p>`;
+}
+
+function textoEmHtml(texto: string) {
+  return texto.split(/\n{2,}/).map((bloco) => blocoEmHtml(bloco.split('\n').map((l) => l.trim()).filter(Boolean))).join('\n');
+}
 
 interface Pagina { head: string; corpo: string; status: number; canonico?: string }
 
@@ -62,7 +75,43 @@ class SeoService {
   constructor(
     @Inject(DB_SERVICE) private readonly db: DbType,
     private readonly campaigns: CampaignService,
+    private readonly noticias: NoticiaService,
   ) {}
+
+  async noticia(valor: string): Promise<Pagina> {
+    let x: Awaited<ReturnType<NoticiaService['publicada']>>;
+    try {
+      x = await this.noticias.publicada(valor);
+    } catch (erro) {
+      if (erro instanceof NotFoundException) return naoEncontrada();
+      throw erro;
+    }
+    const url = `${appUrl()}/noticias/${x.slug}`;
+    const titulo = `${x.titulo} | Salve Mais Um`;
+    const descricao = resumo(x.resumo || (x.corpo ?? '').replace(/\s+/g, ' '));
+    const imagem = previa(x.imagem);
+    const data = x.publicada_em ? new Date(x.publicada_em * 1000).toISOString() : undefined;
+    const dados = {
+      '@context': 'https://schema.org', '@type': x.tipo === 'guia' ? 'Article' : 'NewsArticle', headline: x.titulo, description: descricao,
+      image: [imagem], datePublished: data, dateModified: data, inLanguage: 'pt-BR', mainEntityOfPage: url,
+      author: { '@type': 'Organization', name: 'Salve Mais Um', url: appUrl() },
+      publisher: { '@type': 'Organization', name: 'Salve Mais Um', logo: { '@type': 'ImageObject', url: `${appUrl()}/icones/icone-512.png` } },
+      ...(x.fonte_url ? { isBasedOn: x.fonte_url } : {}),
+    };
+    return {
+      status: 200,
+      canonico: url,
+      head: cabecalho(titulo, descricao, url, imagem, true, dados),
+      corpo: `<article class="pagina">
+  <h1>${esc(x.titulo)}</h1>
+  ${x.resumo ? `<p><strong>${esc(x.resumo)}</strong></p>` : ''}
+  ${textoEmHtml(x.corpo ?? '')}
+  ${x.o_que_muda ? `<h2>O que isso muda para você</h2>${textoEmHtml(x.o_que_muda)}` : ''}
+  ${x.fonte_url ? `<p>Fonte: <a href="${esc(x.fonte_url)}" rel="noopener">${esc(x.fonte_nome || x.fonte_url)}</a></p>` : ''}
+  <p><a href="${appUrl()}/noticias">Mais notícias sobre doação de sangue</a></p>
+</article>`,
+    };
+  }
 
   async campanha(valor: string): Promise<Pagina> {
     const id = idDoSlug(valor);
@@ -157,13 +206,14 @@ class SeoService {
   }
 
   async sitemap() {
-    const [campanhas, centros] = await Promise.all([
+    const [campanhas, centros, posts] = await Promise.all([
       this.db.query.campaign.findMany({
         where: and(eq(schema.campaign.status, STATUS_ATIVA), pedidoAberto),
         with: { privacidade: true, cityParent: true, stateParent: true, bcParent: { with: { cityParent: true, stateParent: true } } },
         orderBy: desc(schema.campaign.id),
       }),
       this.db.query.bloodcenter.findMany({ with: { cityParent: true, stateParent: true } }),
+      this.db.select({ slug: schema.noticia.slug, publicada_em: schema.noticia.publicada_em }).from(schema.noticia).where(eq(schema.noticia.situacao, 'publicada')),
     ]);
     const item = (url: string, data?: number | null) =>
       `<url><loc>${esc(url)}</loc>${data ? `<lastmod>${new Date(data * 1000).toISOString().slice(0, 10)}</lastmod>` : ''}</url>`;
@@ -171,6 +221,7 @@ class SeoService {
       ...PAGINAS.map((p) => item(`${appUrl()}/${p}`)),
       ...campanhas.map((c) => item(`${appUrl()}/campanha/${slug([nomePublico(c.name, c.privacidade?.so_primeiro_nome), c.bcParent?.cityParent?.name ?? c.cityParent?.name, c.bcParent?.stateParent?.state ?? c.stateParent?.state], c.id)}`, c.created_at)),
       ...centros.map((h) => item(`${appUrl()}/hemocentro/${slug([h.name, h.cityParent?.name, h.stateParent?.state], h.id)}`)),
+      ...posts.map((p) => item(`${appUrl()}/noticias/${p.slug}`, p.publicada_em)),
     ];
     return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${linhas.join('')}</urlset>`;
   }
@@ -200,14 +251,19 @@ class SeoController {
     return this.responder(await this.seo.hemocentro(s), s, 'hemocentro', res);
   }
 
+  @Get('noticias/:slug')
+  async noticia(@Param('slug') s: string, @Res() res: Response) {
+    return this.responder(await this.seo.noticia(s), s, 'noticias', res);
+  }
+
   @Get('sitemap.xml')
   @Header('Content-Type', 'application/xml; charset=utf-8')
   sitemap() { return this.seo.sitemap(); }
 
   @Get('robots.txt')
   @Header('Content-Type', 'text/plain; charset=utf-8')
-  robots() { return `User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /edit\nDisallow: /campaigns\n\nSitemap: ${appUrl()}/sitemap.xml\n`; }
+  robots() { return `User-agent: *\nAllow: /\nDisallow: /auth/\nDisallow: /edit\nDisallow: /campaigns\nDisallow: /relatorio/\nDisallow: /times/convite/\n\nSitemap: ${appUrl()}/sitemap.xml\n`; }
 }
 
-@Module({ imports: [CampaignModule], controllers: [SeoController], providers: [SeoService] })
+@Module({ imports: [CampaignModule, NoticiaModule], controllers: [SeoController], providers: [SeoService] })
 export class SeoModule {}
