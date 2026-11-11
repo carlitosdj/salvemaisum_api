@@ -22,6 +22,7 @@ import { CorporativoModule } from './corporativo/corporativo.module';
 import { AcaoModule } from './acao/acao.module';
 import { NoticiaModule } from './noticia/noticia.module';
 import { AgenteModule } from './agente/agente.module';
+import { ComentarioModule } from './comentario/comentario.module';
 import { RegistroModule } from './registro/registro.module';
 import { CicloModule } from './ciclo/ciclo.module';
 
@@ -50,6 +51,7 @@ import { CicloModule } from './ciclo/ciclo.module';
     AcaoModule,
     NoticiaModule,
     AgenteModule,
+    ComentarioModule,
     RegistroModule,
     CicloModule,
   ],

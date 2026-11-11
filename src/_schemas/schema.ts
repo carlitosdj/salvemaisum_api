@@ -388,6 +388,33 @@ export const noticia = mysqlTable(
   (t) => [uniqueIndex('uq_noticia_slug').on(t.slug), index('idx_noticia_situacao').on(t.situacao, t.publicada_em), index('idx_noticia_fonte').on(t.fonte_url)],
 );
 
+// Comentários das notícias. DDL em api/sql/2026-11-11-comentarios.sql.
+export const noticiaComentario = mysqlTable('noticia_comentario', {
+  id: int('id').autoincrement().primaryKey(),
+  noticia_id: int('noticia_id').notNull().references(() => noticia.id, fk),
+  user_id: int('user_id').notNull().references(() => user.id, fk),
+  parent_id: int('parent_id').references((): AnyMySqlColumn => noticiaComentario.id, fk),
+  texto: text('texto').notNull(),
+  situacao: varchar('situacao', { length: 12 }).notNull().default('publicado'),
+  motivo_revisao: varchar('motivo_revisao', { length: 255 }),
+  curtidas: int('curtidas').notNull().default(0),
+  denuncias: int('denuncias').notNull().default(0),
+  moderado_por: int('moderado_por').references(() => user.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+  moderado_em: int('moderado_em'),
+  created_at: int('created_at').notNull(),
+  updated_at: int('updated_at').notNull(),
+});
+
+export const noticiaComentarioCurtida = mysqlTable(
+  'noticia_comentario_curtida',
+  {
+    comentario_id: int('comentario_id').notNull().references(() => noticiaComentario.id, fk),
+    user_id: int('user_id').notNull().references(() => user.id, fk),
+    created_at: int('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.comentario_id, t.user_id] })],
+);
+
 // Campanhas achadas pelo agente. DDL em api/sql/2026-11-11-campanhas.sql.
 export const campanhaSugestao = mysqlTable('campanha_sugestao', {
   id: int('id').autoincrement().primaryKey(),
