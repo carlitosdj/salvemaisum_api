@@ -388,6 +388,23 @@ export const noticia = mysqlTable(
   (t) => [uniqueIndex('uq_noticia_slug').on(t.slug), index('idx_noticia_situacao').on(t.situacao, t.publicada_em), index('idx_noticia_fonte').on(t.fonte_url)],
 );
 
+// Instalações do app (PWA), uma linha por aparelho. DDL em api/sql/2026-11-11-instalacoes.sql.
+export const appInstalacao = mysqlTable('app_instalacao', {
+  id: int('id').autoincrement().primaryKey(),
+  aparelho_id: varchar('aparelho_id', { length: 64 }).notNull(),
+  user_id: int('user_id').references(() => user.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+  plataforma: varchar('plataforma', { length: 20 }),
+  navegador: varchar('navegador', { length: 40 }),
+  modelo: varchar('modelo', { length: 120 }),
+  versao_sistema: varchar('versao_sistema', { length: 40 }),
+  origem: varchar('origem', { length: 20 }).notNull(),
+  aberturas: int('aberturas').notNull().default(0),
+  instalado_em: int('instalado_em').notNull(),
+  ultimo_uso_em: int('ultimo_uso_em'),
+  created_at: int('created_at').notNull(),
+  updated_at: int('updated_at').notNull(),
+});
+
 // Comentários das notícias. DDL em api/sql/2026-11-11-comentarios.sql.
 export const noticiaComentario = mysqlTable('noticia_comentario', {
   id: int('id').autoincrement().primaryKey(),

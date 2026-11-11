@@ -23,6 +23,7 @@ import { AcaoModule } from './acao/acao.module';
 import { NoticiaModule } from './noticia/noticia.module';
 import { AgenteModule } from './agente/agente.module';
 import { ComentarioModule } from './comentario/comentario.module';
+import { InstalacaoModule } from './instalacao/instalacao.module';
 import { RegistroModule } from './registro/registro.module';
 import { CicloModule } from './ciclo/ciclo.module';
 
@@ -52,6 +53,7 @@ import { CicloModule } from './ciclo/ciclo.module';
     NoticiaModule,
     AgenteModule,
     ComentarioModule,
+    InstalacaoModule,
     RegistroModule,
     CicloModule,
   ],
