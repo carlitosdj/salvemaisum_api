@@ -381,6 +381,7 @@ export const noticia = mysqlTable(
     tokens_saida: int('tokens_saida').notNull().default(0),
     buscas: int('buscas').notNull().default(0),
     custo_usd: decimal('custo_usd', { precision: 10, scale: 4, mode: 'number' }).notNull().default(0),
+    curtidas: int('curtidas').notNull().default(0),
     created_at: int('created_at').notNull(),
     updated_at: int('updated_at').notNull(),
   },

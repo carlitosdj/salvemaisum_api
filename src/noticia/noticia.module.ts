@@ -1,11 +1,12 @@
-import { BadRequestException, Body, Controller, Delete, Get, Inject, Injectable, Module, NotFoundException, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Ip, Delete, Get, Inject, Injectable, Module, NotFoundException, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, IsUrl, Length, MaxLength } from 'class-validator';
-import { and, desc, eq, lte, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, like, lte, ne, or, sql } from 'drizzle-orm';
 import { AdminOnly, AuthUser, CurrentUser, SkipAuth } from '../auth/auth.decorators';
 import { agora } from '../common/agora';
-import { idDoSlug, slug } from '../common/slug';
+import { idDoSlug } from '../common/slug';
+import { LimiteTentativas } from '../common/limite';
 import { DB_SERVICE, DbType } from '../drizzle/drizzle.provider';
 import * as schema from '../_schemas/schema';
 import { CHAVES_EDITORIAS, EDITORIAS } from '../agente/editorias';
@@ -34,13 +35,24 @@ export class NoticiaDto {
   @IsOptional() @IsString() @MaxLength(5000) pontos_conferir?: string;
 }
 
+class CurtirDto { @IsIn([1, -1]) @Type(() => Number) valor: number; }
+
+// Endereço amigável: só o título, sem número. Em caso de repetição, ganha -2, -3...
+function textoParaSlug(t: string) {
+  let s = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (s.length > 90) s = s.slice(0, 90).replace(/-[^-]*$/, ''); // corta na última palavra inteira
+  return s.replace(/-+$/, '') || 'noticia';
+}
+
+const limiteCurtidas = new LimiteTentativas(60, 60 * 60 * 1000);
+
 class PublicarDto { @IsOptional() @IsInt() @Type(() => Number) quando?: number; }
 
 // Campos que o site mostra. Instagram, origem e quem criou ficam só no adm.
 const publica = (x: typeof n.$inferSelect) => ({
   id: x.id, slug: x.slug, tipo: x.tipo, categoria: x.categoria, titulo: x.titulo, resumo: x.resumo, corpo: x.corpo,
   o_que_muda: x.o_que_muda, fonte_nome: x.fonte_nome, fonte_url: x.fonte_url, imagem: x.imagem, imagem_alt: x.imagem_alt,
-  titulo_seo: x.titulo_seo, palavra_chave: x.palavra_chave, publicada_em: x.publicada_em,
+  titulo_seo: x.titulo_seo, palavra_chave: x.palavra_chave, publicada_em: x.publicada_em, curtidas: x.curtidas,
 });
 
 const vazioParaNull = (d: NoticiaDto) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, typeof v === 'string' && !v.trim() ? null : typeof v === 'string' ? v.trim() : v]));
@@ -56,9 +68,25 @@ export class NoticiaService {
       .where(and(eq(n.situacao, 'agendada'), lte(n.publicar_em, t)));
   }
 
-  async publicadas(categoria?: string, pagina = 1) {
+  private async slugUnico(titulo: string, id?: number) {
+    const base = textoParaSlug(titulo);
+    for (let i = 1; i < 50; i++) {
+      const tentativa = i === 1 ? base : `${base}-${i}`;
+      const [outro] = await this.db.select({ id: n.id }).from(n).where(eq(n.slug, tentativa)).limit(1);
+      if (!outro || outro.id === id) return tentativa;
+    }
+    return `${base}-${Date.now()}`;
+  }
+
+  async publicadas(categoria?: string, pagina = 1, busca?: string) {
     await this.liberarAgendadas();
-    const onde = and(eq(n.situacao, 'publicada'), categoria && (CATEGORIAS as readonly string[]).includes(categoria) ? eq(n.categoria, categoria) : undefined);
+    const termo = busca?.trim().slice(0, 80);
+    const procura = termo ? `%${termo.replace(/[\\%_]/g, (c) => `\\${c}`)}%` : null;
+    const onde = and(
+      eq(n.situacao, 'publicada'),
+      categoria && (CATEGORIAS as readonly string[]).includes(categoria) ? eq(n.categoria, categoria) : undefined,
+      procura ? or(like(n.titulo, procura), like(n.resumo, procura), like(n.corpo, procura), like(n.palavra_chave, procura)) : undefined,
+    );
     const [itens, [total]] = await Promise.all([
       this.db.select().from(n).where(onde).orderBy(desc(n.publicada_em), desc(n.id)).limit(POR_PAGINA).offset((Math.max(1, pagina) - 1) * POR_PAGINA),
       this.db.select({ total: sql<number>`COUNT(*)` }).from(n).where(onde),
@@ -68,8 +96,12 @@ export class NoticiaService {
 
   async publicada(valor: string) {
     await this.liberarAgendadas();
-    const id = idDoSlug(valor);
-    const [x] = id ? await this.db.select().from(n).where(and(eq(n.id, id), eq(n.situacao, 'publicada'))) : [];
+    // Endereço amigável primeiro; links antigos (com o número no fim) ainda funcionam e são redirecionados
+    let [x] = await this.db.select().from(n).where(and(eq(n.slug, valor), eq(n.situacao, 'publicada'))).limit(1);
+    if (!x) {
+      const id = idDoSlug(valor);
+      [x] = id ? await this.db.select().from(n).where(and(eq(n.id, id), eq(n.situacao, 'publicada'))) : [];
+    }
     if (!x) throw new NotFoundException('Notícia não encontrada.');
     const relacionadas = await this.db.select().from(n)
       .where(and(eq(n.situacao, 'publicada'), ne(n.id, x.id), x.categoria ? or(eq(n.categoria, x.categoria), eq(n.tipo, 'guia')) : undefined))
@@ -99,13 +131,15 @@ export class NoticiaService {
       ...vazioParaNull(d), titulo: d.titulo.trim(), slug: `rascunho-${t}-${Math.random().toString(36).slice(2, 8)}`,
       criado_por: autor, origem: extra.origem ?? 'manual', execucao_id: extra.execucao_id, created_at: t, updated_at: t,
     }).$returningId();
-    await this.db.update(n).set({ slug: slug([d.titulo], novo.id) }).where(eq(n.id, novo.id));
+    await this.db.update(n).set({ slug: await this.slugUnico(d.titulo, novo.id) }).where(eq(n.id, novo.id));
     return this.uma(novo.id);
   }
 
   async atualizar(id: number, d: NoticiaDto) {
-    await this.uma(id);
-    await this.db.update(n).set({ ...vazioParaNull(d), titulo: d.titulo.trim(), slug: slug([d.titulo], id), updated_at: agora() }).where(eq(n.id, id));
+    const atual = await this.uma(id);
+    // Depois de publicada, o endereço não muda (links compartilhados continuam valendo)
+    const novoSlug = atual.situacao === 'publicada' ? atual.slug : await this.slugUnico(d.titulo, id);
+    await this.db.update(n).set({ ...vazioParaNull(d), titulo: d.titulo.trim(), slug: novoSlug, updated_at: agora() }).where(eq(n.id, id));
     return this.uma(id);
   }
 
@@ -141,6 +175,15 @@ export class NoticiaService {
     return this.uma(id);
   }
 
+  // "Isso foi útil": contador simples; o navegador lembra quem já marcou e o IP tem limite por hora
+  async curtir(id: number, valor: number) {
+    const [x] = await this.db.select({ id: n.id }).from(n).where(and(eq(n.id, id), eq(n.situacao, 'publicada')));
+    if (!x) throw new NotFoundException('Notícia não encontrada.');
+    await this.db.update(n).set({ curtidas: valor > 0 ? sql`${n.curtidas} + 1` : sql`GREATEST(${n.curtidas} - 1, 0)` }).where(eq(n.id, id));
+    const [r] = await this.db.select({ curtidas: n.curtidas }).from(n).where(eq(n.id, id));
+    return { curtidas: r.curtidas };
+  }
+
   // Para o agente não sugerir duas vezes a mesma notícia
   async jaExiste(fonteUrl: string) {
     const [x] = await this.db.select({ id: n.id }).from(n).where(eq(n.fonte_url, fonteUrl)).limit(1);
@@ -154,7 +197,11 @@ export class NoticiaService {
 class NoticiaController {
   constructor(private readonly noticias: NoticiaService) {}
 
-  @SkipAuth() @Get('noticias') publicadas(@Query('categoria') c?: string, @Query('pagina') p?: string) { return this.noticias.publicadas(c, Number(p) || 1); }
+  @SkipAuth() @Get('noticias') publicadas(@Query('categoria') c?: string, @Query('pagina') p?: string, @Query('q') q?: string) { return this.noticias.publicadas(c, Number(p) || 1, q); }
+  @SkipAuth() @Post('noticias/:id/curtir') curtir(@Param('id', ParseIntPipe) id: number, @Body() d: CurtirDto, @Ip() ip: string) {
+    limiteCurtidas.verificar(ip);
+    return this.noticias.curtir(id, d.valor);
+  }
   @SkipAuth() @Get('noticias/:slug') publicada(@Param('slug') s: string) { return this.noticias.publicada(s); }
 
   @AdminOnly() @Get('admin/noticias') listar(@Query('situacao') s?: string) { return this.noticias.listar(s); }

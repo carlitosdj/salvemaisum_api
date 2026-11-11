@@ -40,3 +40,6 @@ ALTER TABLE `noticia`
   ADD COLUMN `buscas` int NOT NULL DEFAULT 0 AFTER `tokens_saida`,
   ADD COLUMN `custo_usd` decimal(10,4) NOT NULL DEFAULT 0 AFTER `buscas`,
   ADD CONSTRAINT `fk_noticia_tema` FOREIGN KEY (`tema_id`) REFERENCES `noticia_tema` (`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- 2026-11-11: contador do botão "Isso foi útil" nas notícias
+ALTER TABLE `noticia` ADD COLUMN `curtidas` int NOT NULL DEFAULT 0 AFTER `custo_usd`;
