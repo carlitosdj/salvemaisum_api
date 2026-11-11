@@ -19,7 +19,7 @@ const RECEBE: Record<string, string[]> = {
   '1': ['O−'], '2': ['O+', 'O−'], '3': ['A−', 'O−'], '4': ['A+', 'A−', 'O+', 'O−'],
   '5': ['B−', 'O−'], '6': ['B+', 'B−', 'O+', 'O−'], '7': ['A−', 'B−', 'AB−', 'O−'], '8': ['A+', 'A−', 'B+', 'B−', 'AB+', 'AB−', 'O+', 'O−'],
 };
-const PAGINAS = ['', 'campanhas', 'hemocentros', 'posso-doar', 'medula', 'howtodonate', 'howitworks', 'initiative', 'whoweare', 'palestras', 'namidia', 'contact', 'noticias', 'acoes', 'apoiadores', 'doar', 'redessociais', 'direitos', 'times'];
+const PAGINAS = ['', 'campanhas', 'hemocentros', 'posso-doar', 'medula', 'howtodonate', 'howitworks', 'initiative', 'whoweare', 'palestras', 'namidia', 'contact', 'noticias', 'acoes', 'apoiadores', 'doar', 'redessociais', 'direitos', 'times', 'privacidade', 'exclusao-de-dados'];
 
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const resumo = (t: string, n = 158) => (t.length > n ? `${t.slice(0, n - 1).trim()}…` : t);
