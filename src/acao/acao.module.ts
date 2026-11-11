@@ -56,6 +56,7 @@ class AcaoService {
         situacao,
         meta: inteiro(a.campos.meta),
         capa: a.campos.capa ?? null,
+        fonte: a.campos.fonte_url ? { url: a.campos.fonte_url, nome: a.campos.fonte_nome ?? null } : null,
         local: await this.local(cidade, hemocentro),
         patrocinadores: await this.patrocinadores(patrocinadores),
         doacoes: situacao === 'futura' ? 0 : await this.doacoes(inicio, fim, cidade, hemocentro),

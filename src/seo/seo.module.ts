@@ -87,13 +87,14 @@ class SeoService {
       throw erro;
     }
     const url = `${appUrl()}/noticias/${x.slug}`;
-    const titulo = `${x.titulo} | Salve Mais Um`;
+    const titulo = `${x.titulo_seo || x.titulo} | Salve Mais Um`;
     const descricao = resumo(x.resumo || (x.corpo ?? '').replace(/\s+/g, ' '));
-    const imagem = previa(x.imagem);
+    // A capa gerada já tem 1200x630, o tamanho das prévias: vai o arquivo original
+    const imagem = x.imagem?.startsWith('noticia-') ? `${apiUrl()}/files/${encodeURIComponent(x.imagem)}` : previa(x.imagem);
     const data = x.publicada_em ? new Date(x.publicada_em * 1000).toISOString() : undefined;
     const dados = {
       '@context': 'https://schema.org', '@type': x.tipo === 'guia' ? 'Article' : 'NewsArticle', headline: x.titulo, description: descricao,
-      image: [imagem], datePublished: data, dateModified: data, inLanguage: 'pt-BR', mainEntityOfPage: url,
+      image: [imagem], datePublished: data, ...(x.palavra_chave ? { keywords: x.palavra_chave } : {}), dateModified: data, inLanguage: 'pt-BR', mainEntityOfPage: url,
       author: { '@type': 'Organization', name: 'Salve Mais Um', url: appUrl() },
       publisher: { '@type': 'Organization', name: 'Salve Mais Um', logo: { '@type': 'ImageObject', url: `${appUrl()}/icones/icone-512.png` } },
       ...(x.fonte_url ? { isBasedOn: x.fonte_url } : {}),

@@ -49,6 +49,8 @@ COPY --from=builder --chown=www-data:www-data /app/node_modules ./node_modules
 # Copiar build e arquivos necessários
 COPY --from=builder --chown=www-data:www-data /app/dist ./dist
 COPY --from=builder --chown=www-data:www-data /app/package.json ./
+# Fontes usadas nas capas das notícias (worker)
+COPY --from=builder --chown=www-data:www-data /app/assets ./assets
 
 # Criar diretório para uploads (se necessário)
 RUN mkdir -p /app/uploads && chown -R www-data:www-data /app/uploads

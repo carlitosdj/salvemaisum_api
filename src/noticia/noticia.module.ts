@@ -8,9 +8,11 @@ import { agora } from '../common/agora';
 import { idDoSlug, slug } from '../common/slug';
 import { DB_SERVICE, DbType } from '../drizzle/drizzle.provider';
 import * as schema from '../_schemas/schema';
+import { CHAVES_EDITORIAS, EDITORIAS } from '../agente/editorias';
+import { gerarCapas } from '../agente/capas';
 
 // Blog do Salve Mais Um. Rascunhos vêm do adm ou do agente; só o admin publica ou agenda.
-export const CATEGORIAS = ['estoques', 'ciencia', 'regras', 'historias', 'guias', 'mundo', 'salvemaisum'] as const;
+export const CATEGORIAS = CHAVES_EDITORIAS;
 export const SITUACOES = ['rascunho', 'agendada', 'publicada', 'descartada'] as const;
 const n = schema.noticia;
 const POR_PAGINA = 12;
@@ -26,6 +28,10 @@ export class NoticiaDto {
   @IsOptional() @IsUrl({ protocols: ['http', 'https'], require_protocol: true }, { message: 'O link da fonte precisa começar com http:// ou https://' }) @MaxLength(500) fonte_url?: string;
   @IsOptional() @IsString() @MaxLength(255) imagem?: string;
   @IsOptional() @IsString() @MaxLength(3000) texto_instagram?: string;
+  @IsOptional() @IsString() @MaxLength(70) titulo_seo?: string;
+  @IsOptional() @IsString() @MaxLength(120) palavra_chave?: string;
+  @IsOptional() @IsString() @MaxLength(255) imagem_alt?: string;
+  @IsOptional() @IsString() @MaxLength(5000) pontos_conferir?: string;
 }
 
 class PublicarDto { @IsOptional() @IsInt() @Type(() => Number) quando?: number; }
@@ -33,7 +39,8 @@ class PublicarDto { @IsOptional() @IsInt() @Type(() => Number) quando?: number; 
 // Campos que o site mostra. Instagram, origem e quem criou ficam só no adm.
 const publica = (x: typeof n.$inferSelect) => ({
   id: x.id, slug: x.slug, tipo: x.tipo, categoria: x.categoria, titulo: x.titulo, resumo: x.resumo, corpo: x.corpo,
-  o_que_muda: x.o_que_muda, fonte_nome: x.fonte_nome, fonte_url: x.fonte_url, imagem: x.imagem, publicada_em: x.publicada_em,
+  o_que_muda: x.o_que_muda, fonte_nome: x.fonte_nome, fonte_url: x.fonte_url, imagem: x.imagem, imagem_alt: x.imagem_alt,
+  titulo_seo: x.titulo_seo, palavra_chave: x.palavra_chave, publicada_em: x.publicada_em,
 });
 
 const vazioParaNull = (d: NoticiaDto) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, typeof v === 'string' && !v.trim() ? null : typeof v === 'string' ? v.trim() : v]));
@@ -125,6 +132,15 @@ export class NoticiaService {
     return id;
   }
 
+  // Refaz as três artes com o título e o resumo atuais (depois de editar o texto)
+  async refazerCapas(id: number) {
+    const x = await this.uma(id);
+    const categoria = x.categoria && x.categoria in EDITORIAS ? x.categoria : 'doacao';
+    const capas = await gerarCapas({ titulo: x.titulo, categoria, rotulo: EDITORIAS[categoria as keyof typeof EDITORIAS], resumo: x.resumo });
+    await this.db.update(n).set({ imagem: capas.capa, arte_feed: capas.feed, arte_story: capas.story, updated_at: agora() }).where(eq(n.id, id));
+    return this.uma(id);
+  }
+
   // Para o agente não sugerir duas vezes a mesma notícia
   async jaExiste(fonteUrl: string) {
     const [x] = await this.db.select({ id: n.id }).from(n).where(eq(n.fonte_url, fonteUrl)).limit(1);
@@ -147,6 +163,7 @@ class NoticiaController {
   @AdminOnly() @Put('admin/noticias/:id') atualizar(@Param('id', ParseIntPipe) id: number, @Body() d: NoticiaDto) { return this.noticias.atualizar(id, d); }
   @AdminOnly() @Post('admin/noticias/:id/publicar') publicar(@Param('id', ParseIntPipe) id: number, @Body() d: PublicarDto) { return this.noticias.publicar(id, d.quando); }
   @AdminOnly() @Post('admin/noticias/:id/rascunho') rascunho(@Param('id', ParseIntPipe) id: number) { return this.noticias.mudarSituacao(id, 'rascunho'); }
+  @AdminOnly() @Post('admin/noticias/:id/capas') capas(@Param('id', ParseIntPipe) id: number) { return this.noticias.refazerCapas(id); }
   @AdminOnly() @Post('admin/noticias/:id/descartar') descartar(@Param('id', ParseIntPipe) id: number) { return this.noticias.mudarSituacao(id, 'descartada'); }
   @AdminOnly() @Delete('admin/noticias/:id') remover(@Param('id', ParseIntPipe) id: number) { return this.noticias.remover(id); }
 }

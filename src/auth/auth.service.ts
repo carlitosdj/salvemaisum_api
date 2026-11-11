@@ -62,7 +62,7 @@ export class AuthService {
     }
   }
 
-  async loginGoogle(credencial: string) {
+  async loginGoogle(credencial: string, somenteAdmin = false) {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) throw new ServiceUnavailableException('Login com Google indisponível.');
 
@@ -75,10 +75,19 @@ export class AuthService {
     }
     if (!dados?.email || !dados.email_verified) throw new UnauthorizedException('E-mail Google não verificado.');
 
-    return this.entrarSocial(dados.email, dados.name, dados.picture);
+    return this.entrarSocial(dados.email, dados.name, dados.picture, somenteAdmin);
   }
 
-  private async entrarSocial(email: string, nome?: string, foto?: string) {
+  // No painel, o provedor só confirma quem é a pessoa: não cria conta e só deixa entrar quem já é administrador
+  private async entrarSocial(email: string, nome?: string, foto?: string, somenteAdmin = false) {
+    if (somenteAdmin) {
+      const admin = await this.db.query.user.findFirst({ where: eq(schema.user.email, email), with: COM_PERFIL });
+      if (!admin || admin.flags !== 1 || admin.blocked_at || !admin.confirmed_at) {
+        throw new UnauthorizedException('Esta conta não tem acesso ao painel de administração.');
+      }
+      const access_token = await this.sessao(admin.id, admin.password_hash);
+      return { ...semSegredos(admin), access_token };
+    }
     await this.contaSocial(email, nome ?? email.split('@')[0], foto);
     const usuario = await this.db.query.user.findFirst({ where: eq(schema.user.email, email), with: COM_PERFIL });
     if (usuario.blocked_at) throw new UnauthorizedException('Conta bloqueada.');
@@ -86,7 +95,7 @@ export class AuthService {
     return { ...semSegredos(usuario), access_token };
   }
 
-  async loginFacebook(token: string) {
+  async loginFacebook(token: string, somenteAdmin = false) {
     const { FACEBOOK_APP_ID: appId, FACEBOOK_APP_SECRET: segredo } = process.env;
     if (!appId || !segredo) throw new ServiceUnavailableException('Login com Facebook indisponível.');
     const grafo = 'https://graph.facebook.com/v21.0';
@@ -101,7 +110,7 @@ export class AuthService {
     }
     const eu = await consultar(`${grafo}/me?${new URLSearchParams({ fields: 'name,email,picture.width(400)', access_token: token })}`).catch(() => null);
     if (!eu?.email) throw new BadRequestException('Sua conta Facebook não informou e-mail. Entre com Google ou com seu e-mail.');
-    return this.entrarSocial(eu.email, eu.name, eu.picture?.data?.url);
+    return this.entrarSocial(eu.email, eu.name, eu.picture?.data?.url, somenteAdmin);
   }
 
   async login(dados: LoginDto, somenteAdmin: boolean) {

@@ -57,6 +57,14 @@ jobs:
             echo "Reiniciando container da API..."
             docker compose -f docker-compose.prod.yml up -d api
 
+            # O worker usa a mesma imagem; só sobe se o compose do servidor já tiver o servico
+            if docker compose -f docker-compose.prod.yml config --services | grep -qx worker; then
+              echo "Reiniciando o worker..."
+              docker compose -f docker-compose.prod.yml up -d worker
+            else
+              echo "AVISO: docker-compose.prod.yml do servidor ainda nao tem o servico worker."
+            fi
+
             echo "Limpando imagens antigas..."
             docker image prune -f
 

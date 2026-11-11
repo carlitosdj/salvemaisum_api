@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { double, index, int, mysqlTable, primaryKey, text, uniqueIndex, varchar } from 'drizzle-orm/mysql-core';
+import { decimal, double, index, int, mediumtext, mysqlTable, primaryKey, text, tinyint, uniqueIndex, varchar } from 'drizzle-orm/mysql-core';
 import type { AnyMySqlColumn } from 'drizzle-orm/mysql-core';
 
 // Espelha as tabelas da 2.0 (mesmos nomes de coluna): o banco de produção é reaproveitado.
@@ -321,11 +321,32 @@ export const agenteExecucao = mysqlTable('agente_execucao', {
   iniciou_em: int('iniciou_em').notNull(),
   terminou_em: int('terminou_em'),
   situacao: varchar('situacao', { length: 12 }).notNull().default('rodando'),
+  pedido: varchar('pedido', { length: 12 }).notNull().default('fila'),
+  pauta: varchar('pauta', { length: 500 }),
+  pauta_tipo: varchar('pauta_tipo', { length: 12 }),
+  quantidade: int('quantidade').notNull().default(0),
+  etapa: varchar('etapa', { length: 255 }),
+  linha_do_tempo: mediumtext('linha_do_tempo'),
   encontradas: int('encontradas').notNull().default(0),
   rascunhos: int('rascunhos').notNull().default(0),
   tokens_entrada: int('tokens_entrada').notNull().default(0),
   tokens_saida: int('tokens_saida').notNull().default(0),
+  buscas: int('buscas').notNull().default(0),
+  tokens_cache_leitura: int('tokens_cache_leitura').notNull().default(0),
+  tokens_cache_escrita: int('tokens_cache_escrita').notNull().default(0),
+  custo_usd: decimal('custo_usd', { precision: 10, scale: 4, mode: 'number' }).notNull().default(0),
+  pedido_por: int('pedido_por'),
   erro: text('erro'),
+});
+
+export const noticiaTema = mysqlTable('noticia_tema', {
+  id: int('id').autoincrement().primaryKey(),
+  nome: varchar('nome', { length: 120 }).notNull(),
+  categoria: varchar('categoria', { length: 40 }).notNull(),
+  instrucao: text('instrucao'),
+  ativo: tinyint('ativo').notNull().default(1),
+  usado_em: int('usado_em'),
+  created_at: int('created_at').notNull(),
 });
 
 export const noticia = mysqlTable(
@@ -335,25 +356,71 @@ export const noticia = mysqlTable(
     slug: varchar('slug', { length: 160 }).notNull(),
     tipo: varchar('tipo', { length: 12 }).notNull().default('noticia'),
     categoria: varchar('categoria', { length: 40 }),
+    palavra_chave: varchar('palavra_chave', { length: 120 }),
     titulo: varchar('titulo', { length: 200 }).notNull(),
+    titulo_seo: varchar('titulo_seo', { length: 70 }),
     resumo: varchar('resumo', { length: 400 }),
     corpo: text('corpo'),
     o_que_muda: text('o_que_muda'),
     fonte_nome: varchar('fonte_nome', { length: 160 }),
     fonte_url: varchar('fonte_url', { length: 500 }),
     imagem: varchar('imagem', { length: 255 }),
+    imagem_alt: varchar('imagem_alt', { length: 255 }),
+    arte_feed: varchar('arte_feed', { length: 255 }),
+    arte_story: varchar('arte_story', { length: 255 }),
     texto_instagram: text('texto_instagram'),
+    pontos_conferir: text('pontos_conferir'),
     situacao: varchar('situacao', { length: 12 }).notNull().default('rascunho'),
     publicar_em: int('publicar_em'),
     publicada_em: int('publicada_em'),
     origem: varchar('origem', { length: 12 }).notNull().default('manual'),
     criado_por: int('criado_por').references(() => user.id, { onDelete: 'set null', onUpdate: 'cascade' }),
     execucao_id: int('execucao_id').references(() => agenteExecucao.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+    tema_id: int('tema_id').references(() => noticiaTema.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+    tokens_entrada: int('tokens_entrada').notNull().default(0),
+    tokens_saida: int('tokens_saida').notNull().default(0),
+    buscas: int('buscas').notNull().default(0),
+    custo_usd: decimal('custo_usd', { precision: 10, scale: 4, mode: 'number' }).notNull().default(0),
     created_at: int('created_at').notNull(),
     updated_at: int('updated_at').notNull(),
   },
   (t) => [uniqueIndex('uq_noticia_slug').on(t.slug), index('idx_noticia_situacao').on(t.situacao, t.publicada_em), index('idx_noticia_fonte').on(t.fonte_url)],
 );
+
+// Campanhas achadas pelo agente. DDL em api/sql/2026-11-11-campanhas.sql.
+export const campanhaSugestao = mysqlTable('campanha_sugestao', {
+  id: int('id').autoincrement().primaryKey(),
+  execucao_id: int('execucao_id').references(() => agenteExecucao.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+  tipo: varchar('tipo', { length: 12 }).notNull(),
+  situacao: varchar('situacao', { length: 12 }).notNull().default('nova'),
+  titulo: varchar('titulo', { length: 200 }).notNull(),
+  descricao: text('descricao'),
+  hemocentro_nome: varchar('hemocentro_nome', { length: 255 }),
+  bloodcenter_id: int('bloodcenter_id').references(() => bloodcenter.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+  cidade_nome: varchar('cidade_nome', { length: 120 }),
+  uf: varchar('uf', { length: 2 }),
+  city_id: int('city_id').references(() => city.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+  inicio: varchar('inicio', { length: 10 }),
+  fim: varchar('fim', { length: 10 }),
+  tipos_sanguineos: varchar('tipos_sanguineos', { length: 60 }),
+  paciente_nome: varchar('paciente_nome', { length: 120 }),
+  contato: text('contato'),
+  fonte_nome: varchar('fonte_nome', { length: 160 }),
+  fonte_url: varchar('fonte_url', { length: 500 }).notNull(),
+  fonte_data: varchar('fonte_data', { length: 10 }),
+  pontos_conferir: text('pontos_conferir'),
+  observacao: text('observacao'),
+  acao_id: int('acao_id'),
+  campaign_id: int('campaign_id'),
+  decidido_por: int('decidido_por').references(() => user.id, { onDelete: 'set null', onUpdate: 'cascade' }),
+  decidido_em: int('decidido_em'),
+  tokens_entrada: int('tokens_entrada').notNull().default(0),
+  tokens_saida: int('tokens_saida').notNull().default(0),
+  buscas: int('buscas').notNull().default(0),
+  custo_usd: decimal('custo_usd', { precision: 10, scale: 4, mode: 'number' }).notNull().default(0),
+  created_at: int('created_at').notNull(),
+  updated_at: int('updated_at').notNull(),
+});
 
 export const cidadeCoordenada = mysqlTable('cidade_coordenada', {
   city_id: int('city_id').primaryKey().references(() => city.id, fk),

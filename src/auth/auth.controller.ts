@@ -40,6 +40,18 @@ export class AuthController {
     return this.auth.login(dados, true);
   }
 
+  @Post('loginadm/google')
+  googleAdm(@Body() dados: GoogleDto, @Ip() ip: string) {
+    limiteLogin.verificar(`${ip}:google-adm`);
+    return this.auth.loginGoogle(dados.credential, true);
+  }
+
+  @Post('loginadm/facebook')
+  facebookAdm(@Body() dados: FacebookDto, @Ip() ip: string) {
+    limiteLogin.verificar(`${ip}:facebook-adm`);
+    return this.auth.loginFacebook(dados.accessToken, true);
+  }
+
   @Post('confirm')
   confirmar(@Body() dados: KeyDto, @Ip() ip: string) {
     limiteChave.verificar(ip);
