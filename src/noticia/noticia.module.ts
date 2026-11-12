@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Ip, Delete, Get, Inject, Injectable, Module, NotFoundException, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Ip, Delete, Get, Inject, Injectable, Logger, Module, NotFoundException, OnModuleDestroy, OnModuleInit, Param, ParseIntPipe, Post, Put, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, IsUrl, Length, MaxLength } from 'class-validator';
@@ -58,14 +58,27 @@ const publica = (x: typeof n.$inferSelect) => ({
 const vazioParaNull = (d: NoticiaDto) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, typeof v === 'string' && !v.trim() ? null : typeof v === 'string' ? v.trim() : v]));
 
 @Injectable()
-export class NoticiaService {
+export class NoticiaService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger('Noticias');
+  private timer?: NodeJS.Timeout;
+
   constructor(@Inject(DB_SERVICE) private readonly db: DbType) {}
 
-  // Agendadas cujo horário chegou viram publicadas na primeira leitura
+  // Confere a cada minuto: a notícia agendada vai ao ar no horário mesmo sem ninguém abrir o site
+  onModuleInit() {
+    this.timer = setInterval(() => this.liberarAgendadas().catch((e) => this.logger.warn(`Agendadas: ${e.message}`)), 60000);
+  }
+
+  onModuleDestroy() {
+    clearInterval(this.timer);
+  }
+
+  // Agendadas cujo horário chegou viram publicadas (também roda em cada leitura, por garantia)
   private async liberarAgendadas() {
     const t = agora();
-    await this.db.update(n).set({ situacao: 'publicada', publicada_em: sql`${n.publicar_em}`, updated_at: t })
+    const [r] = await this.db.update(n).set({ situacao: 'publicada', publicada_em: sql`${n.publicar_em}`, updated_at: t })
       .where(and(eq(n.situacao, 'agendada'), lte(n.publicar_em, t)));
+    if (r?.affectedRows) this.logger.log(`${r.affectedRows} notícia(s) agendada(s) publicada(s)`);
   }
 
   private async slugUnico(titulo: string, id?: number) {
@@ -147,7 +160,8 @@ export class NoticiaService {
     const x = await this.uma(id);
     if (!x.titulo || !x.corpo) throw new BadRequestException('Antes de publicar, preencha título e texto.');
     const t = agora();
-    const agendar = quando && quando > t + 60;
+    if (quando !== undefined && quando <= t + 60) throw new BadRequestException('Escolha um horário daqui a pelo menos 2 minutos. Para publicar já, use "Publicar agora".');
+    const agendar = quando !== undefined;
     await this.db.update(n).set(agendar
       ? { situacao: 'agendada', publicar_em: quando, publicada_em: null, updated_at: t }
       : { situacao: 'publicada', publicar_em: null, publicada_em: x.publicada_em ?? t, updated_at: t }).where(eq(n.id, id));

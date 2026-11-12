@@ -25,3 +25,11 @@ class ProfileUpdateDto {
 export class UpdateMeDto {
   @ValidateNested() @Type(() => ProfileUpdateDto) profile: ProfileUpdateDto;
 }
+
+export class TrocarSenhaDto {
+  @IsString() @MaxLength(72) senhaAtual: string;
+  @IsString() @MinLength(6, { message: 'A senha nova precisa de ao menos 6 caracteres.' }) @MaxLength(72) novaSenha: string;
+}
+
+// Usado pelo adm para corrigir o perfil de alguém (o e-mail não muda por aqui)
+export class PerfilAdminDto extends ProfileUpdateDto {}

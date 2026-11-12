@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { eq } from 'drizzle-orm';
@@ -8,7 +8,7 @@ import { EmailService } from '../email/email.service';
 import { appUrl } from '../common/urls';
 import { agora } from '../common/agora';
 import { semSegredos } from '../auth/auth.service';
-import { RegisterDto, UpdateMeDto } from './user.dto';
+import { RegisterDto, TrocarSenhaDto, UpdateMeDto } from './user.dto';
 
 const COM_PERFIL = { profile: { with: { cityParent: true, stateParent: true } } } as const;
 
@@ -73,5 +73,16 @@ export class UserService {
     }
     await this.db.update(schema.user).set({ updated_at: agora() }).where(eq(schema.user.id, id));
     return semSegredos(await this.buscar(id));
+  }
+
+  // Quem entrou só com Google/Facebook recebeu uma senha aleatória: para essas pessoas o caminho é o link por e-mail
+  async trocarSenha(id: number, { senhaAtual, novaSenha }: TrocarSenhaDto) {
+    const usuario = await this.buscar(id);
+    if (!(await bcrypt.compare(senhaAtual, usuario.password_hash))) {
+      throw new BadRequestException('A senha atual não confere. Se você entra com Google ou Facebook, use "Receber link por e-mail".');
+    }
+    if (senhaAtual === novaSenha) throw new BadRequestException('A senha nova precisa ser diferente da atual.');
+    await this.db.update(schema.user).set({ password_hash: await bcrypt.hash(novaSenha, 10), updated_at: agora() }).where(eq(schema.user.id, id));
+    return { ok: true };
   }
 }

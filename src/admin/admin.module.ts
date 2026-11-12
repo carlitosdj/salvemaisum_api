@@ -1,10 +1,12 @@
-import { Body, Controller, Delete, Get, Inject, Injectable, Module, NotFoundException, Param, ParseIntPipe, Patch, Query, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Injectable, Module, NotFoundException, Param, ParseIntPipe, Patch, Post, Put, Query, BadRequestException } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsOptional, IsString } from 'class-validator';
 import { and, count, desc, eq, inArray, isNotNull, like, or, SQL } from 'drizzle-orm';
 import { AdminOnly, AuthUser, CurrentUser } from '../auth/auth.decorators';
-import { semSegredos } from '../auth/auth.service';
+import { AuthService, semSegredos } from '../auth/auth.service';
+import { AuthModule } from '../auth/auth.module';
+import { PerfilAdminDto } from '../user/user.dto';
 import { agora } from '../common/agora';
 import { DB_SERVICE, DbType } from '../drizzle/drizzle.provider';
 import * as schema from '../_schemas/schema';
@@ -33,6 +35,7 @@ class AdminService {
   constructor(
     @Inject(DB_SERVICE) private readonly db: DbType,
     private readonly campaigns: CampaignService,
+    private readonly auth: AuthService,
   ) {}
 
   async painel() {
@@ -83,6 +86,23 @@ class AdminService {
     return { id, blocked: bloqueado };
   }
 
+  async editarUsuario(id: number, perfil: PerfilAdminDto) {
+    const usuario = await this.existe(id);
+    if (!usuario.profileUserId) throw new BadRequestException('Esta conta não tem perfil.');
+    const dados = Object.fromEntries(Object.entries(perfil).filter(([, v]) => v !== undefined));
+    if (Object.keys(dados).length) await this.db.update(schema.profile).set(dados).where(eq(schema.profile.user_id, usuario.profileUserId));
+    await this.db.update(u).set({ updated_at: agora() }).where(eq(u.id, id));
+    const atualizado = await this.db.query.user.findFirst({ where: eq(u.id, id), with: { profile: { with: { cityParent: true, stateParent: true } } } });
+    return semSegredos(atualizado!);
+  }
+
+  // O adm nunca define nem vê a senha de ninguém: a pessoa recebe o link e cria a própria
+  async linkSenha(id: number) {
+    const usuario = await this.existe(id);
+    await this.auth.pedirRecuperacao(usuario.email);
+    return { enviado: true, email: usuario.email };
+  }
+
   async removerUsuario(id: number, eu: AuthUser) {
     if (id === eu.id) throw new BadRequestException('Você não pode excluir a própria conta.');
     const usuario = await this.existe(id);
@@ -121,10 +141,12 @@ class AdminController {
   @Get('dashboard') painel() { return this.admin.painel(); }
   @Get('users') usuarios(@Query() q: PageQuery) { return this.admin.usuarios(q); }
   @Patch('users/:id/block') bloquear(@Param('id', ParseIntPipe) id: number, @Body() d: BlockDto, @CurrentUser() eu: AuthUser) { return this.admin.bloquear(id, d.blocked, eu); }
+  @Put('users/:id') editar(@Param('id', ParseIntPipe) id: number, @Body() d: PerfilAdminDto) { return this.admin.editarUsuario(id, d); }
+  @Post('users/:id/link-senha') linkSenha(@Param('id', ParseIntPipe) id: number) { return this.admin.linkSenha(id); }
   @Delete('users/:id') remover(@Param('id', ParseIntPipe) id: number, @CurrentUser() eu: AuthUser) { return this.admin.removerUsuario(id, eu); }
   @Get('campaigns') campanhas(@Query() q: PageQuery) { return this.admin.campanhas(q); }
   @Patch('campaigns/:id/status') status(@Param('id', ParseIntPipe) id: number, @Body() d: StatusDto) { return this.campaigns.alterarStatus(id, d.status); }
 }
 
-@Module({ imports: [CampaignModule], controllers: [AdminController], providers: [AdminService] })
+@Module({ imports: [CampaignModule, AuthModule], controllers: [AdminController], providers: [AdminService] })
 export class AdminModule {}
