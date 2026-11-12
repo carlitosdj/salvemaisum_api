@@ -131,12 +131,13 @@ export class CampaignService {
   }
 
   // O que o público vê: o nome respeita a escolha da família e os dados do consentimento não saem daqui.
-  publica<T extends { name: string | null; privacidade?: { so_primeiro_nome: number } | null; meta?: { meta_doadores: number } | null; statusPedido?: { situacao: string } | null; verificacao?: { fonte: string } | null }>(campanha: T) {
+  publica<T extends { name: string | null; privacidade?: { so_primeiro_nome: number } | null; meta?: { meta_doadores: number } | null; statusPedido?: { situacao: string; expires_at?: number | null } | null; verificacao?: { fonte: string } | null }>(campanha: T) {
     const { privacidade, meta, statusPedido, verificacao, ...resto } = campanha;
     return {
       ...resto,
       verificado: !!verificacao,
       situacao: statusPedido?.situacao ?? 'ativo',
+      valido_ate: statusPedido?.expires_at ?? null,
       name: nomePublico(campanha.name, privacidade?.so_primeiro_nome),
       so_primeiro_nome: !!privacidade?.so_primeiro_nome,
       meta: meta?.meta_doadores ?? null,
