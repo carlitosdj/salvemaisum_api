@@ -388,6 +388,20 @@ export const noticia = mysqlTable(
   (t) => [uniqueIndex('uq_noticia_slug').on(t.slug), index('idx_noticia_situacao').on(t.situacao, t.publicada_em), index('idx_noticia_fonte').on(t.fonte_url)],
 );
 
+// Fontes extras das notícias (a principal fica em noticia.fonte_*). DDL em api/sql/2026-11-14-noticia-fontes.sql.
+export const noticiaFonte = mysqlTable(
+  'noticia_fonte',
+  {
+    id: int('id').autoincrement().primaryKey(),
+    noticia_id: int('noticia_id').notNull().references(() => noticia.id, { onDelete: 'cascade', onUpdate: 'cascade' }),
+    nome: varchar('nome', { length: 160 }),
+    url: varchar('url', { length: 500 }).notNull(),
+    ordem: int('ordem').notNull().default(0),
+    created_at: int('created_at').notNull(),
+  },
+  (t) => [index('idx_noticia_fonte_noticia').on(t.noticia_id, t.ordem)],
+);
+
 // Instalações do app (PWA), uma linha por aparelho. DDL em api/sql/2026-11-11-instalacoes.sql.
 export const appInstalacao = mysqlTable('app_instalacao', {
   id: int('id').autoincrement().primaryKey(),

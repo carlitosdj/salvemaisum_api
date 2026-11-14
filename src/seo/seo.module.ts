@@ -92,12 +92,13 @@ class SeoService {
     // A capa gerada já tem 1200x630, o tamanho das prévias: vai o arquivo original
     const imagem = x.imagem?.startsWith('noticia-') ? `${apiUrl()}/files/${encodeURIComponent(x.imagem)}` : previa(x.imagem);
     const data = x.publicada_em ? new Date(x.publicada_em * 1000).toISOString() : undefined;
+    const fontes = [...(x.fonte_url ? [{ nome: x.fonte_nome, url: x.fonte_url }] : []), ...(x.fontes_extras ?? [])];
     const dados = {
       '@context': 'https://schema.org', '@type': x.tipo === 'guia' ? 'Article' : 'NewsArticle', headline: x.titulo, description: descricao,
       image: [imagem], datePublished: data, ...(x.palavra_chave ? { keywords: x.palavra_chave } : {}), dateModified: data, inLanguage: 'pt-BR', mainEntityOfPage: url,
       author: { '@type': 'Organization', name: 'Salve Mais Um', url: appUrl() },
       publisher: { '@type': 'Organization', name: 'Salve Mais Um', logo: { '@type': 'ImageObject', url: `${appUrl()}/icones/icone-512.png` } },
-      ...(x.fonte_url ? { isBasedOn: x.fonte_url } : {}),
+      ...(fontes.length ? { isBasedOn: fontes.length === 1 ? fontes[0].url : fontes.map((y) => y.url) } : {}),
     };
     return {
       status: 200,
@@ -108,7 +109,7 @@ class SeoService {
   ${x.resumo ? `<p><strong>${esc(x.resumo)}</strong></p>` : ''}
   ${textoEmHtml(x.corpo ?? '')}
   ${x.o_que_muda ? `<h2>O que isso muda para você</h2>${textoEmHtml(x.o_que_muda)}` : ''}
-  ${x.fonte_url ? `<p>Fonte: <a href="${esc(x.fonte_url)}" rel="noopener">${esc(x.fonte_nome || x.fonte_url)}</a></p>` : ''}
+  ${fontes.length ? `<p>${fontes.length > 1 ? 'Fontes' : 'Fonte'}: ${fontes.map((y) => `<a href="${esc(y.url)}" rel="noopener">${esc(y.nome || y.url)}</a>`).join(', ')}</p>` : ''}
   <p><a href="${appUrl()}/noticias">Mais notícias sobre doação de sangue</a></p>
 </article>`,
     };
